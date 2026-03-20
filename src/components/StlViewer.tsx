@@ -4,12 +4,11 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
-// Read Printer Bed Constraints from .env
 const BED_SIZE_X = parseFloat(process.env.NEXT_PUBLIC_MAX_X || "256");
 const BED_SIZE_Y = parseFloat(process.env.NEXT_PUBLIC_MAX_Y || "256");
 
 interface StlViewerProps {
-  geometry: THREE.BufferGeometry | null; // Allow null when no file is uploaded
+  geometry: THREE.BufferGeometry | null;
 }
 
 export default function StlViewer({ geometry }: StlViewerProps) {
@@ -24,22 +23,21 @@ export default function StlViewer({ geometry }: StlViewerProps) {
 
     // --- 1. Scene Setup ---
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#f1f5f9"); 
+    scene.background = new THREE.Color("#333333"); // Dark slicer background
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
     
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = true; 
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap; 
     container.appendChild(renderer.domElement);
 
-    // --- 2. Add Print Plate (Always visible) ---
+    // --- 2. Add Print Plate ---
     const bedGeometry = new THREE.PlaneGeometry(BED_SIZE_X, BED_SIZE_Y);
     const bedMaterial = new THREE.MeshStandardMaterial({
-      color: "#919191", 
-      roughness: 0.9,
-      metalness: 0.1,
+      color: "#222222", 
+      roughness: 0.8,
     });
     const bedMesh = new THREE.Mesh(bedGeometry, bedMaterial);
     bedMesh.rotation.x = -Math.PI / 2; 
@@ -51,7 +49,7 @@ export default function StlViewer({ geometry }: StlViewerProps) {
     gridHelper.position.y = 0; 
     scene.add(gridHelper);
 
-    // --- 3. Conditionally Add the STL Model ---
+    // --- 3. Process the STL Model ---
     let displayGeometry: THREE.BufferGeometry | null = null;
     let mesh: THREE.Mesh | null = null;
     let material: THREE.MeshStandardMaterial | null = null;
@@ -60,16 +58,21 @@ export default function StlViewer({ geometry }: StlViewerProps) {
       displayGeometry = geometry.clone();
       displayGeometry.rotateX(-Math.PI / 2);
       
+      // ✨ THE MAGIC LINE: This calculates smooth shading across the curves! ✨
+      displayGeometry.computeVertexNormals();
+      
       displayGeometry.computeBoundingBox();
       const box = displayGeometry.boundingBox!;
       const center = new THREE.Vector3();
       box.getCenter(center);
 
+      // A smooth resin-like material to catch highlights
       material = new THREE.MeshStandardMaterial({
-        color: "#3b82f6", 
-        roughness: 0.5,
-        metalness: 0.2,
+        color: "#5f6e7d", // Slate-blue/gray, standard for 3D modeling
+        roughness: 0.4,   // Low enough to get nice specular highlights on curves
+        metalness: 0.1,   // Adds a slight sheen
       });
+      
       mesh = new THREE.Mesh(displayGeometry, material);
       mesh.castShadow = true; 
       mesh.receiveShadow = true; 
@@ -78,17 +81,29 @@ export default function StlViewer({ geometry }: StlViewerProps) {
       scene.add(mesh);
     }
 
-    // --- 4. Lighting ---
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // --- 4. Professional 3-Point Studio Lighting ---
+    // Ambient: Base visibility
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
     scene.add(ambientLight);
 
-    const spotLight = new THREE.SpotLight(0xffffff, 1.5);
-    spotLight.position.set(150, 300, 150); 
-    spotLight.castShadow = true;
-    spotLight.shadow.mapSize.width = 1024;
-    spotLight.shadow.mapSize.height = 1024;
-    spotLight.shadow.bias = -0.0001; 
-    scene.add(spotLight);
+    // Key Light: Primary light source (casts shadows)
+    const keyLight = new THREE.SpotLight(0xffffff, 1.2);
+    keyLight.position.set(150, 300, 150); 
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 1024;
+    keyLight.shadow.mapSize.height = 1024;
+    keyLight.shadow.bias = -0.0005; 
+    scene.add(keyLight);
+
+    // Fill Light: Softens the dark shadows on the opposite side
+    const fillLight = new THREE.DirectionalLight(0xaaccff, 0.6); // Slightly cool tone
+    fillLight.position.set(-150, 100, -150);
+    scene.add(fillLight);
+
+    // Rim/Back Light: Highlights the edges of the model to separate it from the background
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    rimLight.position.set(0, 150, -250);
+    scene.add(rimLight);
 
     // --- 5. Controls ---
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -102,23 +117,20 @@ export default function StlViewer({ geometry }: StlViewerProps) {
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.PAN
     };
-
     controls.maxPolarAngle = Math.PI / 2 - 0.05; 
 
-    // --- 6. Dynamic Camera Position ---
+    // --- 6. Camera Setup ---
     if (displayGeometry) {
-      // Focus on the loaded model
       const radius = displayGeometry.boundingSphere?.radius || 100;
       camera.position.set(0, radius * 1.5, radius * 2.5);
       controls.target.set(0, radius * 0.5, 0); 
     } else {
-      // Focus on the empty print bed
       camera.position.set(0, BED_SIZE_X * 0.8, BED_SIZE_Y * 1.2);
       controls.target.set(0, 0, 0);
     }
     controls.update();
 
-    // --- 7. Animation Loop ---
+    // --- 7. Loop & Cleanup ---
     let animationFrameId: number;
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
@@ -127,7 +139,6 @@ export default function StlViewer({ geometry }: StlViewerProps) {
     };
     animate();
 
-    // Cleanup
     return () => {
       cancelAnimationFrame(animationFrameId);
       controls.dispose();
@@ -146,12 +157,12 @@ export default function StlViewer({ geometry }: StlViewerProps) {
       ref={mountRef} 
       className="w-full h-full min-h-[320px] rounded-2xl border-2 border-gray-200 overflow-hidden cursor-move shadow-inner relative"
     >
-      <div className="absolute bottom-3 left-3 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none font-medium flex gap-3">
+      <div className="absolute bottom-3 left-3 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none font-medium flex gap-3 z-10">
         <span>🖱️ Rotate: <span className="font-bold text-gray-200">Left Click</span></span>
         <span>✋ Pan: <span className="font-bold text-gray-200">Right Click</span></span>
       </div>
       {!geometry && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none text-gray-400 font-bold opacity-50">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none text-gray-400 font-bold opacity-50 z-10 text-xl tracking-wide uppercase">
           Empty Print Bed
         </div>
       )}
