@@ -11,7 +11,6 @@ export default function Home() {
   const [material, setMaterial] = useState("PLA");
   const [infill, setInfill] = useState(15);
   
-  // Model Data
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
   const [volume, setVolume] = useState<number | null>(null);
   const [dimensions, setDimensions] = useState<{x:number, y:number, z:number} | null>(null);
@@ -72,126 +71,134 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-100 py-2 px-4">
-      <div className="max-w-md mx-auto bg-white rounded-3xl shadow-2xl p-8 space-y-6">
-        <h1 className="text-2xl font-black text-center text-gray-800">3D Print Quote</h1>
+    <main className="min-h-screen bg-gray-100 py-2 px-4 md:py-5 md:px-8">
+      <div className="max-w-7xl mx-auto space-y-2">
+        <div className="flex items-center justify-between px-2">
+          <h1 className="text-3xl font-black text-gray-800">3D Print Quote</h1>
+        </div>
 
-        {/* --- ALWAYS VISIBLE 3D PREVIEW --- */}
-        <StlViewer geometry={geometry} />
+        {/* CSS GRID: 1 column on mobile, 12 columns on large screens */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+          
+          {/* LEFT COLUMN: 3D Preview (Takes 8/12 columns on desktop) */}
+          <div className="lg:col-span-8 bg-white rounded-3xl shadow-xl p-4 flex flex-col h-[50vh] lg:h-[75vh]">
+            <StlViewer geometry={geometry} />
+          </div>
 
-        {/* --- FILE UPLOADER OR FILE DETAILS --- */}
-        {!geometry ? (
-          <FileUploader onFileSelect={handleFileSelect} selectedFile={file} />
-        ) : (
-          <div className="space-y-3">
-            <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
-              <span className="font-semibold text-gray-700 truncate w-3/4">{file?.name}</span>
-              <button 
-                onClick={clearFile} 
-                className="text-sm text-red-500 hover:text-red-700 font-bold px-2"
-              >
-                Remove
-              </button>
-            </div>
+          {/* RIGHT COLUMN: Controls Panel (Takes 4/12 columns on desktop) */}
+          <div className="lg:col-span-4 bg-white rounded-3xl shadow-xl p-6 lg:p-8 space-y-6 flex flex-col h-fit">
             
-            {/* Dimension Readout & Warnings */}
-            {dimensions && (
-              <div className={`p-3 rounded-lg text-sm font-semibold text-center border ${sizeError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
-                Dimensions: {dimensions.x.toFixed(1)} x {dimensions.y.toFixed(1)} x {dimensions.z.toFixed(1)} mm
-                {sizeError && <p className="mt-1 text-red-600 font-bold">{sizeError}</p>}
+            {/* File Uploader / File Details */}
+            {!geometry ? (
+              <FileUploader onFileSelect={handleFileSelect} selectedFile={file} />
+            ) : (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                  <span className="font-semibold text-gray-700 truncate w-3/4">{file?.name}</span>
+                  <button onClick={clearFile} className="text-sm text-red-500 hover:text-red-700 font-bold px-2 transition-colors">
+                    Remove
+                  </button>
+                </div>
+                {dimensions && (
+                  <div className={`p-3 rounded-lg text-sm font-semibold text-center border ${sizeError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
+                    Size: {dimensions.x.toFixed(1)} x {dimensions.y.toFixed(1)} x {dimensions.z.toFixed(1)} mm
+                    {sizeError && <p className="mt-1 text-red-600 font-bold">{sizeError}</p>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Material Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Material</label>
+              <div className="grid grid-cols-3 gap-2">
+                {["PLA", "ABS", "PETG"].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMaterial(m)}
+                    className={`py-2 rounded-lg border-2 font-bold transition-all ${
+                      material === m ? "border-blue-600 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-500"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Infill Selection */}
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-600 uppercase tracking-wide">Infill Density</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "Minimal", val: 5 },
+                  { label: "Normal", val: 15 },
+                  { label: "Hard", val: 40 },
+                ].map((i) => (
+                  <button
+                    key={i.val}
+                    onClick={() => setInfill(i.val)}
+                    className={`py-2 flex flex-col items-center rounded-lg border-2 transition-all ${
+                      infill === i.val ? "border-blue-600 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-500"
+                    }`}
+                  >
+                    <span className="text-xs">{i.label}</span>
+                    <span className="font-bold">{i.val}%</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <button
+              onClick={processFile}
+              disabled={!volume || isCalculating || !!sizeError}
+              className="w-full bg-blue-600 text-white py-4 rounded-xl font-black text-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 transition-all shadow-lg active:scale-[0.98]"
+            >
+              {isCalculating ? "Calculating..." : !!sizeError ? "Model Too Large" : "Get Price"}
+            </button>
+
+            {/* Results Block */}
+            {result && (
+              <div className="mt-2 p-5 bg-blue-50 border border-blue-200 rounded-2xl animate-in fade-in slide-in-from-bottom-4 space-y-3 text-blue-900 shadow-sm">
+                <div className="flex justify-between text-sm text-blue-700 border-b border-blue-200 pb-3">
+                  <span>Est. Weight: <span className="font-bold">{result.weightGrams.toFixed(1)}g</span></span>
+                  <span>Est. Time: <span className="font-bold">
+                    {result.estimatedHours < 1 
+                      ? `${Math.round(result.estimatedHours * 60)} min` 
+                      : `${result.estimatedHours.toFixed(1)} hrs`}
+                  </span></span>
+                </div>
+
+                <div className="space-y-1 pt-2">
+                  <div className="flex justify-between">
+                    <span>Net Price:</span>
+                    <span>{result.netPrice.toFixed(2)}€</span>
+                  </div>
+                  {result.hasVat && (
+                    <>
+                      <div className="flex justify-between text-sm text-blue-700">
+                        <span>VAT ({result.vatPercentage}%):</span>
+                        <span>{result.vatAmount.toFixed(2)}€</span>
+                      </div>
+                      <div className="flex justify-between text-2xl font-black pt-3 mt-2 border-t border-blue-200">
+                        <span>Total:</span>
+                        <span>{result.totalPriceWithVat.toFixed(2)}€</span>
+                      </div>
+                    </>
+                  )}
+                  {!result.hasVat && (
+                    <div className="flex justify-between text-2xl font-black pt-3 mt-2 border-t border-blue-200">
+                      <span>Total:</span>
+                      <span>{result.netPrice.toFixed(2)}€</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
-        )}
 
-        {/* Material Selection */}
-        <div className="space-y-2">
-          <label className="text-sm font-bold text-gray-600 uppercase">Material</label>
-          <div className="grid grid-cols-3 gap-2">
-            {["PLA", "ABS", "PETG"].map((m) => (
-              <button
-                key={m}
-                onClick={() => setMaterial(m)}
-                className={`py-2 rounded-lg border-2 font-bold transition-all ${
-                  material === m ? "border-blue-600 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-400"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
         </div>
-
-        {/* Infill Selection */}
-        <div className="space-y-2">
-          <label className="text-sm font-bold text-gray-600 uppercase">Infill Density</label>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: "Minimal", val: 5 },
-              { label: "Normal", val: 15 },
-              { label: "Hard", val: 40 },
-            ].map((i) => (
-              <button
-                key={i.val}
-                onClick={() => setInfill(i.val)}
-                className={`py-2 flex flex-col items-center rounded-lg border-2 transition-all ${
-                  infill === i.val ? "border-blue-600 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-400"
-                }`}
-              >
-                <span className="text-xs">{i.label}</span>
-                <span className="font-bold">{i.val}%</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Action Button */}
-        <button
-          onClick={processFile}
-          disabled={!volume || isCalculating || !!sizeError}
-          className="w-full bg-blue-600 text-white py-4 rounded-xl font-black text-lg hover:bg-blue-700 disabled:bg-gray-300 transition-all shadow-lg"
-        >
-          {isCalculating ? "Calculating..." : !!sizeError ? "Model Too Large" : "Get Price"}
-        </button>
-
-        {/* Results Block */}
-        {result && (
-          <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-2xl animate-in fade-in slide-in-from-bottom-4 space-y-3 text-blue-900">
-            <div className="flex justify-between text-sm text-blue-700 border-b border-blue-200 pb-3">
-              <span>Est. Weight: <span className="font-bold">{result.weightGrams.toFixed(1)}g</span></span>
-              <span>Est. Time: <span className="font-bold">
-                {result.estimatedHours < 1 
-                  ? `${Math.round(result.estimatedHours * 60)} min` 
-                  : `${result.estimatedHours.toFixed(1)} hrs`}
-              </span></span>
-            </div>
-
-            <div className="space-y-1 pt-2">
-              <div className="flex justify-between">
-                <span>Price:</span>
-                <span>{result.netPrice.toFixed(2)}€</span>
-              </div>
-              {result.hasVat && (
-                <>
-                  <div className="flex justify-between text-sm text-blue-700">
-                    <span>VAT ({result.vatPercentage}%):</span>
-                    <span>{result.vatAmount.toFixed(2)}€</span>
-                  </div>
-                  <div className="flex justify-between text-2xl font-black pt-3 mt-2 border-t border-blue-200">
-                    <span>Total (Inc. VAT):</span>
-                    <span>{result.totalPriceWithVat.toFixed(2)}€</span>
-                  </div>
-                </>
-              )}
-              {!result.hasVat && (
-                <div className="flex justify-between text-2xl font-black pt-3 mt-2 border-t border-blue-200">
-                  <span>Estimated Total:</span>
-                  <span>{result.netPrice.toFixed(2)}€</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </main>
   );

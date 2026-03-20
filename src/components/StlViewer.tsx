@@ -144,7 +144,7 @@ export default function StlViewer({ geometry }: StlViewerProps) {
   return (
     <div 
       ref={mountRef} 
-      className="w-full h-80 rounded-2xl border-2 border-gray-200 overflow-hidden cursor-move shadow-inner relative"
+      className="w-full h-full min-h-[320px] rounded-2xl border-2 border-gray-200 overflow-hidden cursor-move shadow-inner relative"
     >
       <div className="absolute bottom-3 left-3 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none font-medium flex gap-3">
         <span>🖱️ Rotate: <span className="font-bold text-gray-200">Left Click</span></span>
