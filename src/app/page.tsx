@@ -1,25 +1,66 @@
 "use client";
 
 import { useState } from "react";
+import * as THREE from "three";
 import FileUploader from "@/components/FileUploader";
-import { parseSTLAndGetVolume } from "@/lib/stlParser";
+import StlViewer from "@/components/StlViewer";
+import { parseSTL } from "@/lib/stlParser";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [material, setMaterial] = useState("PLA");
   const [infill, setInfill] = useState(15);
+  
+  // Model Data
+  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
+  const [volume, setVolume] = useState<number | null>(null);
+  const [dimensions, setDimensions] = useState<{x:number, y:number, z:number} | null>(null);
+  const [sizeError, setSizeError] = useState<string | null>(null);
+
   const [isCalculating, setIsCalculating] = useState(false);
   const [result, setResult] = useState<any>(null);
 
+  const maxX = parseFloat(process.env.NEXT_PUBLIC_MAX_X || "256");
+  const maxY = parseFloat(process.env.NEXT_PUBLIC_MAX_Y || "256");
+  const maxZ = parseFloat(process.env.NEXT_PUBLIC_MAX_Z || "256");
+
+  const handleFileSelect = async (selectedFile: File) => {
+    setFile(selectedFile);
+    setResult(null);
+    setSizeError(null);
+    setGeometry(null);
+
+    try {
+      const parsed = await parseSTL(selectedFile);
+      setGeometry(parsed.geometry);
+      setVolume(parsed.volumeCm3);
+      setDimensions(parsed.dimensions);
+
+      if (parsed.dimensions.x > maxX || parsed.dimensions.y > maxY || parsed.dimensions.z > maxZ) {
+        setSizeError(`Model exceeds printer volume. Max size is ${maxX}x${maxY}x${maxZ}mm.`);
+      }
+    } catch (err) {
+      alert("Failed to parse STL file.");
+    }
+  };
+
+  const clearFile = () => {
+    setFile(null);
+    setGeometry(null);
+    setVolume(null);
+    setDimensions(null);
+    setSizeError(null);
+    setResult(null);
+  };
+
   const processFile = async () => {
-    if (!file) return;
+    if (!volume) return;
     setIsCalculating(true);
     try {
-      const volumeCm3 = await parseSTLAndGetVolume(file);
       const response = await fetch("/api/calculate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ volumeCm3, material, infillPercent: infill }),
+        body: JSON.stringify({ volumeCm3: volume, material, infillPercent: infill }),
       });
       const data = await response.json();
       setResult(data);
@@ -31,11 +72,37 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-100 py-12 px-4">
+    <main className="min-h-screen bg-gray-100 py-2 px-4">
       <div className="max-w-md mx-auto bg-white rounded-3xl shadow-2xl p-8 space-y-6">
         <h1 className="text-2xl font-black text-center text-gray-800">3D Print Quote</h1>
 
-        <FileUploader onFileSelect={setFile} selectedFile={file} />
+        {/* --- ALWAYS VISIBLE 3D PREVIEW --- */}
+        <StlViewer geometry={geometry} />
+
+        {/* --- FILE UPLOADER OR FILE DETAILS --- */}
+        {!geometry ? (
+          <FileUploader onFileSelect={handleFileSelect} selectedFile={file} />
+        ) : (
+          <div className="space-y-3">
+            <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+              <span className="font-semibold text-gray-700 truncate w-3/4">{file?.name}</span>
+              <button 
+                onClick={clearFile} 
+                className="text-sm text-red-500 hover:text-red-700 font-bold px-2"
+              >
+                Remove
+              </button>
+            </div>
+            
+            {/* Dimension Readout & Warnings */}
+            {dimensions && (
+              <div className={`p-3 rounded-lg text-sm font-semibold text-center border ${sizeError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-600'}`}>
+                Dimensions: {dimensions.x.toFixed(1)} x {dimensions.y.toFixed(1)} x {dimensions.z.toFixed(1)} mm
+                {sizeError && <p className="mt-1 text-red-600 font-bold">{sizeError}</p>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Material Selection */}
         <div className="space-y-2">
@@ -57,7 +124,7 @@ export default function Home() {
 
         {/* Infill Selection */}
         <div className="space-y-2">
-          <label className="text-sm font-bold text-gray-600 uppercase">Infill Density (Gyroid)</label>
+          <label className="text-sm font-bold text-gray-600 uppercase">Infill Density</label>
           <div className="grid grid-cols-3 gap-2">
             {[
               { label: "Minimal", val: 5 },
@@ -78,18 +145,18 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Action Button */}
         <button
           onClick={processFile}
-          disabled={!file || isCalculating}
+          disabled={!volume || isCalculating || !!sizeError}
           className="w-full bg-blue-600 text-white py-4 rounded-xl font-black text-lg hover:bg-blue-700 disabled:bg-gray-300 transition-all shadow-lg"
         >
-          {isCalculating ? "Calculating..." : "Get Price"}
+          {isCalculating ? "Calculating..." : !!sizeError ? "Model Too Large" : "Get Price"}
         </button>
 
         {/* Results Block */}
         {result && (
           <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-2xl animate-in fade-in slide-in-from-bottom-4 space-y-3 text-blue-900">
-            
             <div className="flex justify-between text-sm text-blue-700 border-b border-blue-200 pb-3">
               <span>Est. Weight: <span className="font-bold">{result.weightGrams.toFixed(1)}g</span></span>
               <span>Est. Time: <span className="font-bold">
@@ -104,8 +171,6 @@ export default function Home() {
                 <span>Price:</span>
                 <span>{result.netPrice.toFixed(2)}€</span>
               </div>
-
-              {/* Conditionally show VAT Breakdown */}
               {result.hasVat && (
                 <>
                   <div className="flex justify-between text-sm text-blue-700">
@@ -118,8 +183,6 @@ export default function Home() {
                   </div>
                 </>
               )}
-
-              {/* Show simple total if no VAT */}
               {!result.hasVat && (
                 <div className="flex justify-between text-2xl font-black pt-3 mt-2 border-t border-blue-200">
                   <span>Estimated Total:</span>
@@ -127,7 +190,6 @@ export default function Home() {
                 </div>
               )}
             </div>
-            
           </div>
         )}
       </div>
